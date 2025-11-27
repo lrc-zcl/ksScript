@@ -1,5 +1,5 @@
-# 自动化脚本
-
+# 脚本
+ksjsb 学习本
 
 ### 1. 安装 ADB
 
@@ -11,3 +11,8 @@
 
 ### 3. 安装 weditor
     weditor
+
+### 4. 配置信息
+    1. Honor 20s
+    2. HarmonyOS 3.0.0
+    3. ksjsb version v13.10.30.10868
