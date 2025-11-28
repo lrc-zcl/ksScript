@@ -1,5 +1,5 @@
 from loguru import logger
-from errorProcess import raise_error
+from utils.errorProcess import raise_error
 
 
 @raise_error

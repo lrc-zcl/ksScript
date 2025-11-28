@@ -42,18 +42,33 @@ class DemoOne():
         elif "领取额外金币" in text_list:
             self.point_list = [0.81, 0.376]
 
+        elif "限时金币暴涨" in text_list:
+            self.point_list = [0.925, 0.499]
+
         return self.point_list
 
     def find_target(self, target_str):
         """  滑动找出界面内容 """
 
-        count = 3  # 滑动 3次 找不到就退出
-        while not self.has_target_content(target_str)[0]:
-            self.con.swipe(0.5, 0.8, 0.5, 0.3)
+        count = 6  # 滑动 3次 找不到就退出
+        while not self.has_target_content(target_str):
+            if count > 3:
+                self.con.swipe(0.5, 0.8, 0.5, 0.3)  # 前三次向下
 
-            if count <= 0:
-                raise Exception(f"滑动{count}次,没找到{target_str}字段按钮")
-            count = count - 1
+                if count <= 0:
+                    raise Exception(f"滑动3次,没找到{target_str}字段按钮")
+                    # logger.warning(f"滑动3次,没找到{target_str}字段按钮")
+                    # self.point_list = []
+                    # break
+                count = count - 1
+            else:
+                self.con.swipe(0.5, 0.3, 0.5, 0.8)  # 后三次向上
+                if count <= 0:
+                    #raise Exception(f"滑动6次,没找到{target_str}字段按钮")
+                    logger.warning(f"滑动6次,没找到{target_str}字段按钮")
+                    self.point_list = []
+                    break
+                count = count - 1
 
         logger.info(f" 找到了{target_str}字段 ".center(20, "="))
         return self.point_list

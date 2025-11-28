@@ -9,7 +9,8 @@ def raise_error(inner_func):
             inner_reslt = inner_func(*args, **kwargs)
             return inner_reslt
         except Exception as error:
-            raise Exception(inner_func.__doc__ + str(error))
+            raise Exception(inner_func.__doc__ + error)
+            #raise error
 
     return wrapper
 

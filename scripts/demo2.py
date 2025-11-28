@@ -6,19 +6,34 @@ from loguru import logger
 from demo1 import DemoOne
 from utils.errorProcess import raise_error
 
+logger.add('../logs/log.log', encoding="utf-8", rotation="1 day", compression="zip")
+
 
 class DemoTwo(DemoOne):
     """ 看广告得金币 """
 
-    def __int__(self, android_device):
-        self.con = ui2.connect(android_device) if android_device else ui2.connect()
+    def __init__(self, android_device=None):
+        try:
+            self.con = ui2.connect(android_device) if android_device else ui2.connect()
+            _ = self.con.info
+            logger.info("✓ 设备连接成功，atx-agent 已就绪")
+        except Exception as e:
+            logger.warning(f"✗ 连接失败或 atx-agent 未安装: {e}")
+            logger.info("正在自动安装 atx-agent，请稍候...")
+
+            from uiautomator2 import init
+            device_serial = android_device if android_device else None
+            init.Installer(device_serial).install()
+            self.con = ui2.connect(android_device) if android_device else ui2.connect()
+            logger.info("✓ atx-agent 安装完成，设备连接成功")
+
         logger.info("*" * 50)
         logger.info(f"当前设备信息 {self.con.info}")
         self.video_count = 50
 
     def get_screen_content(self):
         """  返回界面内容 """
-        point_list = []
+        time.sleep(random.uniform(1, 2))
 
         xml_data = self.con.dump_hierarchy()
         import xml.etree.ElementTree as ET
@@ -33,15 +48,17 @@ class DemoTwo(DemoOne):
                 target_location = node.attrib.get("bounds")
                 location_xy.append(target_location)
 
-        return text_list, point_list
+        return text_list, location_xy
 
     @raise_error
-    def watch_signal_step_video(self):
-        """观看单独视频"""
+    def watch_signal_step_video(self, video_type):
+        """ 观看单独视频 或直播视频"""
+        time_data = random.uniform(1, 10)
+        logger.info(f" 模拟看{video_type}视频{time_data}s ".center(20, "="))
+        time.sleep(time_data)
 
-        time.sleep(random.uniform(1, 10))
-        self.con.click(0.534, 0.084)  # 点击叉试探一下
-
+        x, y = (0.534, 0.084) if video_type == "视频" else (0.935, 0.07)
+        self.con.click(x, y)
         text_list, point_list = self.get_screen_content()
 
         targets = {
@@ -65,52 +82,97 @@ class DemoTwo(DemoOne):
 
         return None
 
-    def main_function(self):
+    @raise_error
+    def click_if_found(self, target_text, self_point=None):
+
+        """查找目标存在及点击并点击（支持自定义点击坐标）"""
+
+        self.find_target(target_text)
+        if not self.point_list:
+            return False
+
+        if self_point:
+            self.con.click(*self_point)
+        else:
+            self.con.click(*self.point_list)
+        logger.info(f" 当前界面中出现了 {target_text} ,已点击")
+        time.sleep(random.uniform(1, 2))
+        return True
+
+    @raise_error
+    def pre_function(self):
+        """ 手机连接成功后的前期处理 """
+
         self.con.app_start("com.kuaishou.nebula", stop=True)
-        time.sleep(1)
+        time.sleep(random.uniform(1, 2))
         logger.info(f"当前应用信息 {self.con.app_current()}")
+        logger.info("*" * 50)
 
         self.click_text("去赚钱")
+        logger.info(" 点击去赚钱成功".center(20, "="))
         time.sleep(10)
 
-        if self.has_target_content("立即签到"):
-            self.con(text="立即签到").click()
-            logger.warning(f"看广告之前出现了 '立即签到',已清除")
+        click_result = self.click_if_found("立即签到")
+        if click_result:
+            self.click_if_found("去看视频", [0.918, 0.185])
 
-            time.sleep(random.uniform(1, 3))
-            if self.has_target_content("去看视频"):
-                self.con.click(0.918, 0.185)
-                logger.warning(f"点击立即签到之后出现了 '去看视频',已清除")
-
-        time.sleep(random.uniform(1, 10))
+        time.sleep(random.uniform(1, 3))
         self.con.swipe(0.5, 0.8, 0.5, 0.6)  # 向下滑动一点点
 
         self.find_target("看广告得金币")
         self.con.click(*self.point_list)
-        time.sleep(random.uniform(1, 5))
+        #time.sleep(random.uniform(1, 5))
 
+    def main_function(self):
+        self.pre_function()
         while self.video_count > 0:
-            watching_result = self.watch_signal_step_video()
-            if not watching_result:
-                logger.error(f"点击叉进行试探时,出现了特殊情况")
-                raise Exception(f"在看视频的过程中,点叉试探时出现了特殊情况,请及时处理！！！")
+            try:
+                try:
+                    video_type = self.con.xpath(
+                        '//*[@resource-id="com.kuaishou.nebula.live_audience_plugin:id/live_follow_text"]'
+                    ).get_text()
+                    video_type = "关注" if video_type == "关注" else "视频"
+                except Exception:
+                    video_type = "视频"
 
-            match watching_result[0]:
-                case "继续观看":
-                    self.con.click(watching_result[1][0], watching_result[1][1])
-                case "领取奖励":
-                    self.video_count = self.video_count - 1
-                    self.con.click(watching_result[1][0], watching_result[1][1])
-                    logger.info("已经看完一个视频,领取一次奖励☺".center(20, "="))
-                    time.sleep(random.uniform(1, 3))
-                case "领取额外金币":
-                    self.video_count = self.video_count - 1
-                    self.con.click(watching_result[1][0], watching_result[1][1])
-                    time.sleep(random.uniform(1, 3))
+                watching_result = self.watch_signal_step_video(video_type)
+                if not watching_result:
+                    if video_type == "视频":
+                        # 目前已知的是 限时金币暴涨、立即投币报名、看广告的金币(可能直接点叉之后回到了该界面了)
+                        logger.error(f"点击叉进行试探时,出现了特殊情况")
 
-                    self.find_target("看广告得金币")
-                    self.con.click(self.point_list[0], self.point_list[1])
-                    logger.warning(f"出现了 '领取额外金币' 点击叉之后再一次点击看广告得金币 重新进入 🙂")
+                        self.click_if_found("限时金币暴涨")
+                        self.click_if_found("立即投币报名", [0.067, 0.12])  # 点击瓜分金币
+
+                        self.find_target("看广告得金币")  # 在重新查找 看广告得金币 先对限时金币暴涨进行点击
+                        self.con.click(*self.point_list)
+                        logger.warning(f"模拟时间到,点叉却返回了 '看广告得金币得界面'")
+                        continue
+                    else:
+                        self.find_target("看广告得金币")  # 在重新查找 看广告得金币 先对限时金币暴涨进行点击
+                        self.con.click(*self.point_list)
+                        logger.warning(f"上一个直播点叉之后直接回 '看广告得金币得界面',模拟时间到,点叉却返回了 '看广告得金币得界面'")
+                        continue
+
+                match watching_result[0]:
+                    case "继续观看":
+                        self.con.click(*watching_result[1])
+                    case "领取奖励":
+                        self.video_count = self.video_count - 1
+                        self.con.click(*watching_result[1])
+                        logger.info(f"当前{50 - self.video_count + 1}, 已经看完一个视频,领取一次奖励☺ ".center(20, "="))
+                        time.sleep(random.uniform(1, 3))
+                    case "领取额外金币":
+                        self.video_count = self.video_count - 1
+                        self.con.click(*watching_result[1])
+                        time.sleep(random.uniform(1, 3))
+
+                        self.find_target("看广告得金币")
+                        self.con.click(*self.point_list)
+                        logger.warning(f"出现了 '领取额外金币' 点击叉之后再一次点击看广告得金币 重新进入 🙂")
+            except Exception as error:
+                logger.error("这个视频初夏了错误,我将重启APP应用重新进入APP 再执行任务" + str(error))
+                self.main_function()
         return "success"
 
 
