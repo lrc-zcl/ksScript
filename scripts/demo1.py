@@ -50,25 +50,17 @@ class DemoOne():
     def find_target(self, target_str):
         """  滑动找出界面内容 """
 
-        count = 6  # 滑动 3次 找不到就退出
+        count = 6
         while not self.has_target_content(target_str):
             if count > 3:
                 self.con.swipe(0.5, 0.8, 0.5, 0.3)  # 前三次向下
-
-                if count <= 0:
-                    raise Exception(f"滑动3次,没找到{target_str}字段按钮")
-                    # logger.warning(f"滑动3次,没找到{target_str}字段按钮")
-                    # self.point_list = []
-                    # break
-                count = count - 1
             else:
-                self.con.swipe(0.5, 0.3, 0.5, 0.8)  # 后三次向上
                 if count <= 0:
-                    #raise Exception(f"滑动6次,没找到{target_str}字段按钮")
                     logger.warning(f"滑动6次,没找到{target_str}字段按钮")
                     self.point_list = []
                     break
-                count = count - 1
+                self.con.swipe(0.5, 0.3, 0.5, 0.8)  # 后三次向上
+            count = count - 1
 
         logger.info(f" 找到了{target_str}字段 ".center(20, "="))
         return self.point_list
