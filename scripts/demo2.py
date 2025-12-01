@@ -13,23 +13,23 @@ class DemoTwo(DemoOne):
     """ 看广告得金币 """
 
     def __init__(self, android_device=None):
-        try:
-            self.con = ui2.connect(android_device) if android_device else ui2.connect()
-            _ = self.con.info
-            logger.info("✓ 设备连接成功，atx-agent 已就绪")
-        except Exception as e:
-            logger.warning(f"✗ 连接失败或 atx-agent 未安装: {e}")
-            logger.info("正在自动安装 atx-agent，请稍候...")
-
-            from uiautomator2 import init
-            device_serial = android_device if android_device else None
-            init.Installer(device_serial).install()
-            self.con = ui2.connect(android_device) if android_device else ui2.connect()
-            logger.info("✓ atx-agent 安装完成，设备连接成功")
+        # try:
+        self.con = ui2.connect(android_device) if android_device else ui2.connect()
+        _ = self.con.info
+        logger.info("✓ 设备连接成功，atx-agent 已就绪")
+        # except Exception as e:
+        #     logger.warning(f"✗ 连接失败或 atx-agent 未安装: {e}")
+        #     logger.info("正在自动安装 atx-agent，请稍候...")
+        #
+        #     from uiautomator2 import init
+        #     device_serial = android_device if android_device else None
+        #     init.Installer(device_serial).install()
+        #     self.con = ui2.connect(android_device) if android_device else ui2.connect()
+        #     logger.info("✓ atx-agent 安装完成，设备连接成功")
 
         logger.info("*" * 50)
         logger.info(f"当前设备信息 {self.con.info}")
-        self.video_count = 50
+        self.video_count = 250
 
     def get_screen_content(self):
         """  返回界面内容 """
@@ -57,8 +57,13 @@ class DemoTwo(DemoOne):
         logger.info(f" 模拟看{video_type}视频{time_data}s ".center(20, "="))
         time.sleep(time_data)
 
-        x, y = (0.534, 0.084) if video_type == "视频" else (0.935, 0.07)
-        self.con.click(x, y)
+        xpath_str = '//*[@resource-id="com.kuaishou.nebula.commercial_neo:id/video_countdown_end_icon"]'
+        #x, y = (0.534, 0.084) if video_type == "视频" else (0.935, 0.07)
+        x, y = (0.935, 0.07)
+        if video_type == "视频":
+            self.con.xpath(xpath_str).click()
+        else:
+            self.con.click(x, y)
         text_list, point_list = self.get_screen_content()
 
         targets = {
@@ -82,22 +87,22 @@ class DemoTwo(DemoOne):
 
         return None
 
-    @raise_error
-    def click_if_found(self, target_text, self_point=None):
-
-        """查找目标存在及点击并点击（支持自定义点击坐标）"""
-
-        self.find_target(target_text)
-        if not self.point_list:
-            return False
-
-        if self_point:
-            self.con.click(*self_point)
-        else:
-            self.con.click(*self.point_list)
-        logger.info(f" 当前界面中出现了 {target_text} ,已点击")
-        time.sleep(random.uniform(1, 2))
-        return True
+    # @raise_error
+    # def click_if_found(self, target_text, self_point=None):
+    #
+    #     """查找目标存在及点击并点击（支持自定义点击坐标）"""
+    #
+    #     self.find_target(target_text)
+    #     if not self.point_list:
+    #         return False
+    #
+    #     if self_point:
+    #         self.con.click(*self_point)
+    #     else:
+    #         self.con.click(*self.point_list)
+    #     logger.info(f" 当前界面中出现了 {target_text} ,已点击")
+    #     time.sleep(random.uniform(1, 2))
+    #     return True
 
     @raise_error
     def pre_function(self):
@@ -121,20 +126,26 @@ class DemoTwo(DemoOne):
 
         self.find_target("看广告得金币")
         self.con.click(*self.point_list)
-        #time.sleep(random.uniform(1, 5))
+        logger.info(f"点击了 看广告得金币 字段")
+        # time.sleep(random.uniform(1, 5))
 
     def main_function(self):
         self.pre_function()
+
         while self.video_count > 0:
             try:
+                if self.find_target("冷却中"):
+                    return "广子状态是冷却中,稍后再试!!"
+
                 try:
                     video_type = self.con.xpath(
                         '//*[@resource-id="com.kuaishou.nebula.live_audience_plugin:id/live_follow_text"]'
                     ).get_text()
                     video_type = "关注" if video_type == "关注" else "视频"
-                except Exception:
+                except Exception as e:
                     video_type = "视频"
 
+                logger.info(f"当前{250 - self.video_count + 1}, 已经看完一个视频,领取一次奖励☺ ".center(20, "="))
                 watching_result = self.watch_signal_step_video(video_type)
                 if not watching_result:
                     if video_type == "视频":
@@ -160,7 +171,6 @@ class DemoTwo(DemoOne):
                     case "领取奖励":
                         self.video_count = self.video_count - 1
                         self.con.click(*watching_result[1])
-                        logger.info(f"当前{50 - self.video_count + 1}, 已经看完一个视频,领取一次奖励☺ ".center(20, "="))
                         time.sleep(random.uniform(1, 3))
                     case "领取额外金币":
                         self.video_count = self.video_count - 1
@@ -171,7 +181,8 @@ class DemoTwo(DemoOne):
                         self.con.click(*self.point_list)
                         logger.warning(f"出现了 '领取额外金币' 点击叉之后再一次点击看广告得金币 重新进入 🙂")
             except Exception as error:
-                logger.error("这个视频初夏了错误,我将重启APP应用重新进入APP 再执行任务" + str(error))
+                logger.error("这个视频出现了错误,我将重启APP应用重新进入APP 再执行任务" + str(error))
+                # raise error
                 self.main_function()
         return "success"
 

@@ -61,9 +61,28 @@ class DemoOne():
                     break
                 self.con.swipe(0.5, 0.3, 0.5, 0.8)  # 后三次向上
             count = count - 1
-
-        logger.info(f" 找到了{target_str}字段 ".center(20, "="))
+        if self.point_list:
+            logger.info(f" 找到了{target_str}字段 ".center(20, "="))
+        else:
+            logger.info(f" 没有找到{target_str}字段 ".center(20, "="))
         return self.point_list
+
+    @raise_error
+    def click_if_found(self, target_text, self_point=None):
+
+        """查找目标存在及点击并点击（支持自定义点击坐标）"""
+
+        self.find_target(target_text)
+        if not self.point_list:
+            return False
+
+        if self_point:
+            self.con.click(*self_point)
+        else:
+            self.con.click(*self.point_list)
+        logger.info(f" 当前界面中出现了 {target_text} ,已点击")
+        time.sleep(random.uniform(1, 2))
+        return True
 
     @raise_error
     def click_xpath(self, xpath_str):
