@@ -2,27 +2,32 @@ import time
 import threading
 from queue import Queue
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
 
 
 class DeviceManager:
     """多设备管理器 - 支持多设备并发运行和动态添加设备"""
     
-    def __init__(self, device_class):
+    def __init__(self, device_class, max_workers=None):
         """
         初始化设备管理器
         :param device_class: 设备类（如 DemoTwo）
+        :param max_workers: 线程池最大工作线程数，None表示使用默认值（CPU核心数*5）
         """
         self.device_class = device_class  # 设备类
-        self.devices = {}  # 存储设备信息 {device_id: {"thread": thread, "instance": instance, "status": status}}
+        self.devices = {}  # 存储设备信息 {device_id: {"future": future, "instance": instance, "status": status}}
         self.device_queue = Queue()  # 用于动态添加设备的队列
         self.lock = threading.Lock()  # 线程锁，确保线程安全
         self.running = True  # 控制管理器运行状态
         
+        # 创建线程池
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        
         # 启动设备监听线程
         self.monitor_thread = threading.Thread(target=self._monitor_devices, daemon=True)
         self.monitor_thread.start()
-        logger.info("✓ 设备管理器已启动，支持动态添加设备")
+        logger.info(f"✓ 设备管理器已启动，支持动态添加设备（线程池大小: {max_workers or '默认'}）")
     
     def add_device(self, device_id, **kwargs):
         """ 添加设备到管理器 """
@@ -64,24 +69,18 @@ class DeviceManager:
             # 创建设备实例
             demo_instance = self.device_class(android_device=device_id, **kwargs)
             
-            # 创建线程
-            thread = threading.Thread(
-                target=self._run_device_task,
-                args=(demo_instance, device_id),
-                daemon=False
-            )
+            # 使用线程池提交任务
+            future = self.executor.submit(self._run_device_task, demo_instance, device_id)
             
             # 保存设备信息
             with self.lock:
                 self.devices[device_id] = {
-                    "thread": thread,
+                    "future": future,
                     "instance": demo_instance,
                     "status": "running",
                     "start_time": datetime.now()
                 }
             
-            # 启动线程
-            thread.start()
             logger.info(f"✓ 设备 {device_id} 启动成功")
             
         except Exception as e:
@@ -89,7 +88,7 @@ class DeviceManager:
             # 记录错误状态
             with self.lock:
                 self.devices[device_id] = {
-                    "thread": None,
+                    "future": None,
                     "instance": None,
                     "status": "error",
                     "start_time": datetime.now(),
@@ -151,17 +150,21 @@ class DeviceManager:
             logger.info(f"设备ID: {device_id}")
             logger.info(f"  状态: {info['status']}")
             logger.info(f"  启动时间: {info['start_time']}")
+            logger.info(f"  执行结果: {info['result']}")
             logger.info("-" * 60)
     
     def wait_all_complete(self):
         """等待所有设备任务完成"""
         logger.info("等待所有设备任务完成...")
         with self.lock:
-            threads = [info["thread"] for info in self.devices.values() if info["thread"] is not None]
+            futures = [info["future"] for info in self.devices.values() if info["future"] is not None]
         
-        for thread in threads:
-            if thread.is_alive():
-                thread.join()
+        # 等待所有任务完成
+        for future in as_completed(futures):
+            try:
+                future.result()  # 获取结果，如果有异常会抛出
+            except Exception as e:
+                logger.error(f"任务执行异常: {e}")
         
         logger.info("✓ 所有设备任务已完成")
         self.print_status()
@@ -189,8 +192,10 @@ class DeviceManager:
             
             device_info = self.devices[device_id]
             if device_info["status"] == "running":
-                logger.warning(f"设备 {device_id} 正在运行，无法移除")
-                return False
+                # 检查 future 是否还在运行
+                if device_info["future"] and not device_info["future"].done():
+                    logger.warning(f"设备 {device_id} 正在运行，无法移除")
+                    return False
             
             del self.devices[device_id]
             logger.info(f"✓ 设备 {device_id} 已移除")
@@ -199,5 +204,7 @@ class DeviceManager:
     def stop(self):
         """停止设备管理器"""
         self.running = False
+        # 关闭线程池，等待所有任务完成
+        self.executor.shutdown(wait=True)
         logger.info("设备管理器已停止")
 
