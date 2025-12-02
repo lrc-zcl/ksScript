@@ -1,6 +1,7 @@
 import re
 import time
 import random
+import subprocess
 import uiautomator2 as ui2
 from loguru import logger
 from demo1 import DemoOne
@@ -13,23 +14,38 @@ class DemoTwo(DemoOne):
     """ 看广告得金币 """
 
     def __init__(self, android_device=None):
-        # try:
-        self.con = ui2.connect(android_device) if android_device else ui2.connect()
-        _ = self.con.info
-        logger.info("✓ 设备连接成功，atx-agent 已就绪")
-        # except Exception as e:
-        #     logger.warning(f"✗ 连接失败或 atx-agent 未安装: {e}")
-        #     logger.info("正在自动安装 atx-agent，请稍候...")
-        #
-        #     from uiautomator2 import init
-        #     device_serial = android_device if android_device else None
-        #     init.Installer(device_serial).install()
-        #     self.con = ui2.connect(android_device) if android_device else ui2.connect()
-        #     logger.info("✓ atx-agent 安装完成，设备连接成功")
+        try:
+            self.con = ui2.connect(android_device) if android_device else ui2.connect()
+            _ = self.con.info
+            logger.info("✓ 设备连接成功，atx-agent 已就绪")
+        except Exception as error:
+            logger.info("atx-aget 可能未安装,正在安装。请打开手机开发者模式" +  str(error))
+            try:
+                cmd = ["python", "-m", "uiautomator2", "init"]
+                if android_device:
+                    cmd.extend(["--serial", android_device])
+
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                if result.returncode == 0:
+                    logger.info("✓ atx-agent 安装完成")
+                else:
+                    logger.error(f"atx-agent 安装失败: {result.stderr}")
+                    raise RuntimeError("atx-agent 安装失败")
+
+                time.sleep(2)
+                self.con = ui2.connect(android_device) if android_device else ui2.connect()
+                logger.info("✓ 重新连接设备连接成功")
+            except subprocess.TimeoutExpired:
+                logger.error("安装 atx-agent 超时，请手动运行: python -m uiautomator2 init")
+                raise
+            except Exception as install_error:
+                logger.error(f"安装失败: {install_error}")
+                logger.info("请手动运行命令安装 atx-agent: python -m uiautomator2 init")
+                raise
 
         logger.info("*" * 50)
         logger.info(f"当前设备信息 {self.con.info}")
-        self.video_count = 250
+        self.video_count = 50
 
     def get_screen_content(self):
         """  返回界面内容 """
